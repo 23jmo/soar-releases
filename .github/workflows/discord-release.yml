@@ -1,0 +1,49 @@
+name: Announce SOAR release on Discord
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Published release tag to announce
+        required: true
+        type: string
+      mention_everyone:
+        description: Notify everyone (automatic release announcements always do)
+        default: false
+        type: boolean
+      dry_run:
+        description: Validate the payload without posting to Discord
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: discord-release-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  announce:
+    if: github.repository == '23jmo/soar-releases'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout notification code
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Test announcement formatting
+        run: node --test scripts/announce-discord.test.mjs
+      - name: Post published release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DISCORD_RELEASE_WEBHOOK_URL: ${{ secrets.DISCORD_RELEASE_WEBHOOK_URL }}
+          DISCORD_CHANNEL_ID: '1556040118052196365'
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+          MENTION_EVERYONE: ${{ github.event_name == 'release' || inputs.mention_everyone }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        run: node scripts/announce-discord.mjs
